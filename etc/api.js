@@ -17,10 +17,7 @@ export const handle_api = async (req, type) => {
 
    const handler = {
       listen: () => {
-         const body = new ReadableStream ({
-            start, cancel
-            // cancel: () => bc.close ()
-         })
+         const body = new ReadableStream ({ start, cancel })
          const stream = body.pipeThrough (new TextEncoderStream ())
          const headers = new Headers ({
             "content-type": "text/event-stream",

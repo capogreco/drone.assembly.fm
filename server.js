@@ -5,7 +5,6 @@ console.clear ()
 
 const handler = async req => {
    const { pathname } = new URL (req.url)
-
    const path_array = pathname.slice (1).split (`/`)
 
    if (path_array[0] === `api`) {
@@ -13,7 +12,6 @@ const handler = async req => {
    }
 
    const fsRoot = path_array[0] === `ctrl` ? "" : "synth"
-
    return serveDir (req, { fsRoot, quiet: true })
 }
 
