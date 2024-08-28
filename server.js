@@ -1,57 +1,50 @@
 import { serveDir } from "https://deno.land/std@0.224.0/http/file_server.ts"
 
-Deno.serve (req => {
-   // console.log (req)
+console.clear ()
 
+const handler = async req => {
    const { pathname } = new URL (req.url)
 
-   if (pathname.startsWith ("/api/listen")) {
-      const bc = new BroadcastChannel (`program_channel`)
-      let timer_id = false
-      const body = new ReadableStream ({
-          start: async controller => {
-            controller.enqueue (`retry: 1000\n\n`)
+   const path_array = pathname.slice (1).split (`/`)
 
-            bc.onmessage = e => {
-               console.log (`broadcast message:`, e)
-               controller.enqueue (`data: ${JSON.stringify (e.data)}\n\n`)
-            }
-
-            const queue_update = async () => {
-               timer_id = false
-   
-               try {
-                  const msg = `hiiii!! ${ new Date () }`
-                  controller.enqueue (`data: ${ msg }\n\n`)
-               }
-   
-               finally {
-                  timer_id = setTimeout (queue_update, 1000)
-               }
-            }
-
-            await queue_update ()
+   if (path_array[0] === `api`) {
+      console.log (`api called`)
+      const bc = new BroadcastChannel (`program`)
+      const db = await Deno.openKv ()
+      const api_handler = {
+         listen: () => {
+            const body = new ReadableStream ({
+               start: controller => {
+                  controller.enqueue (`data: ES established \n\n`)
+                  bc.onmessage = async e => {
+                     if (e.data === `update`) {
+                        const { value: { message } } = await db.get ([ `test` ])
+                        controller.enqueue (`data: ${ message } \n\n`)   
+                     }
+                  }
+               },
+               cancel: () => bc.close ()
+            })
+            const stream = body.pipeThrough (new TextEncoderStream ())
+            const headers = new Headers ({
+               "content-type": "text/event-stream",
+               "cache-control": "no-cache",
+            })
+            return new Response (stream, { headers })
          },
-
-
-         cancel () {
-            bc.close ()
-            if (timer_id) {
-               clearTimeout (timer_id)
-               timer_id = false
-            }
-         }
-      })
-
-      return new Response (body.pipeThrough (new TextEncoderStream ()), {
-         headers: new Headers ({
-            "content-type": "text/event-stream",
-            "cache-control": "no-cache",
-         })
-      })
+         update: async () => {
+            const json = await req.json ()
+            await db.set ([ `test` ], json)
+            bc.postMessage (`update`)
+            return new Response ()
+         },
+      }
+      return api_handler[path_array[1]] ()
    }
 
-   const fsRoot = pathname.startsWith ("/ctrl") ? "" : "synth"
+   const fsRoot = path_array[0] === `ctrl` ? "" : "synth"
 
    return serveDir (req, { fsRoot })
- })
+}
+
+Deno.serve ({ handler })
