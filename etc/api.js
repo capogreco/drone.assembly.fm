@@ -1,20 +1,25 @@
-
 export const handle_api = async (req, type) => {
+
    const bc = new BroadcastChannel (`program`)
    const db = await Deno.openKv ()
+
+   const start = controller => {
+      controller.enqueue (`data: ES established \n\n`)
+      bc.onmessage = async e => {
+         if (e.data === `update`) {
+            const { value: { message } } = await db.get ([ `test` ])
+            controller.enqueue (`data: ${ message } \n\n`)   
+         }
+      }
+   }
+
+   const cancel = () => bc.close ()
+
    const handler = {
       listen: () => {
          const body = new ReadableStream ({
-            start: controller => {
-               controller.enqueue (`data: ES established \n\n`)
-               bc.onmessage = async e => {
-                  if (e.data === `update`) {
-                     const { value: { message } } = await db.get ([ `test` ])
-                     controller.enqueue (`data: ${ message } \n\n`)   
-                  }
-               }
-            },
-            cancel: () => bc.close ()
+            start, cancel
+            // cancel: () => bc.close ()
          })
          const stream = body.pipeThrough (new TextEncoderStream ())
          const headers = new Headers ({
