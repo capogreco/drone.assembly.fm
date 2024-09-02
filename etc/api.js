@@ -4,10 +4,15 @@ export const handle_api = async (req, type) => {
    const db = await Deno.openKv ()
 
    const start = controller => {
-      controller.enqueue (`data: ES established \n\n`)
+      const payload = {
+         type: `welcome`,
+         message: `event source established`
+      }
+      controller.enqueue (`data: ${JSON.stringify (payload) } \n\n`)
       bc.onmessage = async e => {
          if (e.data === `update`) {
-            const { value: { message } } = await db.get ([ `test` ])
+            const { value } = await db.get ([ `program` ])
+            const message = JSON.stringify (value)
             controller.enqueue (`data: ${ message } \n\n`)   
          }
       }
@@ -27,7 +32,7 @@ export const handle_api = async (req, type) => {
       },
       update: async () => {
          const json = await req.json ()
-         await db.set ([ `test` ], json)
+         await db.set ([ `program` ], json)
          bc.postMessage (`update`)
          return new Response ()
       },

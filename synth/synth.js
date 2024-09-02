@@ -2,6 +2,7 @@ import { div } from './etc/synth_splash.js'
 import { init_audio } from './etc/init_audio.js'
 import { cnv, ctx } from './etc/cnv.js'
 import { get_wake_lock } from './etc/wake_lock.js'
+import { update_graph } from "./etc/update_graph.js"
 
 document.body.style.background = `black` 
 document.body.style.overflow = `hidden`
@@ -28,6 +29,21 @@ div.onpointerdown = async () => {
 
 
 const es = new EventSource (`/api/listen`)
+
 es.onmessage = e => {
-   console.dir (e.data)
+   const { data } = e
+   const payload = JSON.parse (data)
+   const { type } = payload
+
+   const handler = {
+      welcome: p => console.log (p.message),
+      update: p => {
+         if (!is_enabled) return
+         update_graph (p, a)
+      }
+   }
+
+   handler[type] (payload)
+
+   console.dir (type)
 }

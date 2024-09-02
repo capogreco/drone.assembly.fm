@@ -1,5 +1,10 @@
 const random_bi = () => Math.random () * 2 - 1
 
+const voices = {
+   index: 0,
+   total: 1
+}
+
 export const init_audio = async a => {
    // a.test = `the test is working`
 
@@ -61,12 +66,12 @@ export const init_audio = async a => {
    a.tremolo.off.start ()
 
    a.pan = a.ctx.createStereoPanner ()
-   // if (voices.total === 1) {
-   //    a.pan.pan.value = 0
-   // } else {
-   //    const pan_val = (voices.index / (voices.total - 1)) * 2 - 1
-   //    a.pan.pan.value = pan_val
-   // }
+   if (voices.total === 1) {
+      a.pan.pan.value = 0
+   } else {
+      const pan_val = (voices.index / (voices.total - 1)) * 2 - 1
+      a.pan.pan.value = pan_val
+   }
 
    a.amp = a.ctx.createGain ()
    a.amp.gain.value = 0

@@ -3,7 +3,7 @@ import { handle_api } from "./etc/api.js"
 
 console.clear ()
 
-const handler = async req => {
+const handler = req => {
    const { pathname } = new URL (req.url)
    const path_array = pathname.slice (1).split (`/`)
 
