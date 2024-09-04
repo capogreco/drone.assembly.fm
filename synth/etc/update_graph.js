@@ -18,9 +18,13 @@ const siq_gen = (num, den, unity) => {
 export const update_graph = async (program, g) => {
    const voices = { index: 0, total: 1 }
 
+   console.dir (program)
+
    const lag_diversity = program.values[23] / 127
    const lag = Math.pow (program.values[15] / 127, 3) * 40
    const lag_time = lag * Math.pow (2, lag_diversity * random_bi ())
+
+   console.log (lag_diversity, lag, lag_time)
 
    if (g.ctx === undefined) return
    const t = g.ctx.currentTime

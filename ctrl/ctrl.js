@@ -76,13 +76,13 @@ const manage_bank = key => {
 
    console.log (json)
 
-   // fetch (`/api/bank`, {
-   //    method: `POST`,
-   //    headers: {
-   //       "Content-Type": `application/json`
-   //    },
-   //    body: json
-   // })
+   fetch (`/api/bank`, {
+      method: `POST`,
+      headers: {
+         "Content-Type": `application/json`
+      },
+      body: json
+   })
 }
 
 let save_mode = false
@@ -97,7 +97,7 @@ const toggle_play = () => {
 globalThis.onkeydown = e => {
    const { key } = e
    const key_handler = {
-      Enter: () => update (),
+      Enter: update,
       p: toggle_play,
       s: () => { save_mode = true },
       0: manage_bank,
@@ -123,5 +123,11 @@ globalThis.onkeydown = e => {
    if (!safe) return
 
    key_handler[key](key)
+}
 
+globalThis.onkeyup = e => {
+   const { key } = e
+   if (key === `s`) {
+      save_mode = false
+   }
 }
