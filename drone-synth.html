@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drone Synthesizer</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #0a0a0a;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
+        #main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        
+        #visualizer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.8;
+            z-index: 1;
+        }
+        
+        #content {
+            z-index: 2;
+            text-align: center;
+            padding: 40px;
+            background: rgba(10, 10, 10, 0.8);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            font-weight: 200;
+            margin-bottom: 30px;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+        
+        #status {
+            margin-bottom: 30px;
+            font-size: 1.1em;
+            color: #888;
+        }
+        
+        #status.connected {
+            color: #4CAF50;
+        }
+        
+        #start-audio {
+            padding: 15px 40px;
+            font-size: 1.2em;
+            background: linear-gradient(135deg, #1a4d2e, #2a5d3e);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            box-shadow: 0 5px 20px rgba(26, 77, 46, 0.4);
+        }
+        
+        #start-audio:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 7px 25px rgba(26, 77, 46, 0.6);
+        }
+        
+        #start-audio:disabled {
+            background: #333;
+            cursor: not-allowed;
+            opacity: 0.5;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        #info {
+            margin-top: 40px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+            max-width: 600px;
+        }
+        
+        .info-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .info-label {
+            font-size: 0.9em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        
+        .info-value {
+            font-size: 1.2em;
+            font-weight: 300;
+            font-family: 'Courier New', monospace;
+        }
+        
+        #controllers {
+            margin-top: 30px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .controller {
+            display: inline-block;
+            margin: 5px;
+            padding: 5px 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+        }
+        
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.8em;
+            }
+            
+            #content {
+                padding: 20px;
+                margin: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="main-container">
+        <canvas id="visualizer"></canvas>
+        
+        <div id="content">
+            <h1>Drone Synthesizer</h1>
+            <div id="status">Initializing...</div>
+            <button id="start-audio" disabled>Start Audio</button>
+            
+            <div id="info">
+                <div class="info-item">
+                    <div class="info-label">Voices</div>
+                    <div class="info-value" id="voice-count">0</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Mode</div>
+                    <div class="info-value" id="mode">Harmonic</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Root</div>
+                    <div class="info-value" id="root-freq">110 Hz</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Volume</div>
+                    <div class="info-value" id="volume">70%</div>
+                </div>
+            </div>
+            
+            <div id="controllers"></div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { DroneSynthEngine } from './lib/drone-synth-engine.js';
+        
+        // Synthesizer ID
+        const synth_id = `synth-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // State
+        let ws = null;
+        let audioContext = null;
+        let synthEngine = null;
+        let analyser = null;
+        let isConnected = false;
+        let controllers = new Map();
+        let voiceMap = new Map(); // Map frequency to voice ID
+        
+        // UI Elements
+        const statusEl = document.getElementById('status');
+        const startButton = document.getElementById('start-audio');
+        const voiceCountEl = document.getElementById('voice-count');
+        const modeEl = document.getElementById('mode');
+        const rootFreqEl = document.getElementById('root-freq');
+        const volumeEl = document.getElementById('volume');
+        const controllersEl = document.getElementById('controllers');
+        const canvas = document.getElementById('visualizer');
+        const ctx = canvas.getContext('2d');
+        
+        // Resize canvas
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // WebSocket connection
+        function connectWebSocket() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${location.host}`);
+            
+            ws.addEventListener('open', () => {
+                isConnected = true;
+                statusEl.textContent = 'Connected to server';
+                statusEl.className = 'connected';
+                
+                // Register with server
+                ws.send(JSON.stringify({
+                    type: 'register',
+                    client_id: synth_id
+                }));
+                
+                // Request controller list
+                ws.send(JSON.stringify({
+                    type: 'request-controllers',
+                    source: synth_id
+                }));
+                
+                startButton.disabled = false;
+            });
+            
+            ws.addEventListener('close', () => {
+                isConnected = false;
+                statusEl.textContent = 'Disconnected from server';
+                statusEl.className = '';
+                
+                // Reconnect after delay
+                setTimeout(connectWebSocket, 3000);
+            });
+            
+            ws.addEventListener('message', async (event) => {
+                const message = JSON.parse(event.data);
+                await handleWebSocketMessage(message);
+            });
+        }
+        
+        // Handle WebSocket messages
+        async function handleWebSocketMessage(message) {
+            switch (message.type) {
+                case 'controllers-list':
+                    message.controllers.forEach(controllerId => {
+                        if (!controllers.has(controllerId)) {
+                            connectToController(controllerId);
+                        }
+                    });
+                    break;
+                    
+                case 'controller-joined':
+                    connectToController(message.controller_id);
+                    break;
+                    
+                case 'controller-left':
+                    const controller = controllers.get(message.controller_id);
+                    if (controller) {
+                        controller.connection.close();
+                        controllers.delete(message.controller_id);
+                        updateControllersList();
+                    }
+                    break;
+                    
+                case 'offer':
+                    await handleOffer(message);
+                    break;
+                    
+                case 'answer':
+                    await handleAnswer(message);
+                    break;
+                    
+                case 'ice':
+                    await handleIce(message);
+                    break;
+            }
+        }
+        
+        // Connect to a controller
+        async function connectToController(controllerId) {
+            const pc = new RTCPeerConnection(await getRTCConfig());
+            
+            const controller = {
+                id: controllerId,
+                connection: pc,
+                paramChannel: null,
+                commandChannel: null,
+                connected: false
+            };
+            
+            controllers.set(controllerId, controller);
+            
+            // Set up data channels
+            pc.ondatachannel = (event) => {
+                const channel = event.channel;
+                
+                if (channel.label === 'params') {
+                    controller.paramChannel = channel;
+                    channel.onmessage = (e) => handleParamMessage(JSON.parse(e.data), controllerId);
+                } else if (channel.label === 'commands') {
+                    controller.commandChannel = channel;
+                    channel.onmessage = (e) => handleCommandMessage(JSON.parse(e.data), controllerId);
+                }
+                
+                channel.onopen = () => {
+                    console.log(`${channel.label} channel open from ${controllerId}`);
+                    controller.connected = true;
+                    updateControllersList();
+                };
+                
+                channel.onclose = () => {
+                    controller.connected = false;
+                    updateControllersList();
+                };
+            };
+            
+            // Handle ICE candidates
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    ws.send(JSON.stringify({
+                        type: 'ice',
+                        source: synth_id,
+                        target: controllerId,
+                        data: event.candidate
+                    }));
+                }
+            };
+            
+            // Create offer
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            
+            ws.send(JSON.stringify({
+                type: 'offer',
+                source: synth_id,
+                target: controllerId,
+                data: offer
+            }));
+        }
+        
+        async function handleOffer(message) {
+            const controller = controllers.get(message.source);
+            if (controller) {
+                await controller.connection.setRemoteDescription(new RTCSessionDescription(message.data));
+                const answer = await controller.connection.createAnswer();
+                await controller.connection.setLocalDescription(answer);
+                
+                ws.send(JSON.stringify({
+                    type: 'answer',
+                    source: synth_id,
+                    target: message.source,
+                    data: answer
+                }));
+            }
+        }
+        
+        async function handleAnswer(message) {
+            const controller = controllers.get(message.source);
+            if (controller) {
+                await controller.connection.setRemoteDescription(new RTCSessionDescription(message.data));
+            }
+        }
+        
+        async function handleIce(message) {
+            const controller = controllers.get(message.source);
+            if (controller) {
+                await controller.connection.addIceCandidate(new RTCIceCandidate(message.data));
+            }
+        }
+        
+        // Get RTC configuration
+        async function getRTCConfig() {
+            try {
+                const response = await fetch('/ice-servers');
+                const data = await response.json();
+                return { iceServers: data.ice_servers };
+            } catch (error) {
+                return { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+            }
+        }
+        
+        // Handle parameter messages
+        function handleParamMessage(data, source) {
+            if (!synthEngine) return;
+            
+            switch (data.type) {
+                case 'noteOn':
+                    const voiceId = synthEngine.startVoice(data.frequency, data.velocity);
+                    voiceMap.set(data.frequency, voiceId);
+                    updateVoiceCount();
+                    break;
+                    
+                case 'noteOff':
+                    const id = voiceMap.get(data.frequency);
+                    if (id !== undefined) {
+                        synthEngine.stopVoice(id);
+                        voiceMap.delete(data.frequency);
+                        updateVoiceCount();
+                    }
+                    break;
+                    
+                case 'rootChange':
+                    rootFreqEl.textContent = `${Math.round(data.frequency)} Hz`;
+                    break;
+                    
+                case 'param':
+                    handleSynthParam(data.name, data.value);
+                    break;
+                    
+                case 'modulation':
+                    // Handle modulation data
+                    break;
+                    
+                case 'dynamics':
+                    if (data.level !== undefined) {
+                        synthEngine.setMasterVolume(data.level);
+                    }
+                    if (data.filterCutoff !== undefined) {
+                        synthEngine.setFilterFrequency(data.filterCutoff * 8000);
+                    }
+                    break;
+            }
+        }
+        
+        // Handle command messages
+        function handleCommandMessage(data, source) {
+            switch (data.type) {
+                case 'modeChange':
+                    modeEl.textContent = data.mode.charAt(0).toUpperCase() + data.mode.slice(1);
+                    break;
+            }
+        }
+        
+        // Handle synth parameters
+        function handleSynthParam(name, value) {
+            if (!synthEngine) return;
+            
+            switch (name) {
+                case 'masterVolume':
+                    synthEngine.setMasterVolume(value);
+                    volumeEl.textContent = `${Math.round(value * 100)}%`;
+                    break;
+                    
+                case 'filterCutoff':
+                    synthEngine.setFilterFrequency(value);
+                    break;
+                    
+                case 'filterQ':
+                    synthEngine.setFilterQ(value);
+                    break;
+                    
+                case 'reverbMix':
+                    synthEngine.setReverbMix(value);
+                    break;
+                    
+                case 'delayMix':
+                    synthEngine.setDelayMix(value);
+                    break;
+            }
+        }
+        
+        // Update UI
+        function updateVoiceCount() {
+            if (synthEngine) {
+                voiceCountEl.textContent = synthEngine.getVoiceCount();
+            }
+        }
+        
+        function updateControllersList() {
+            const connected = Array.from(controllers.values())
+                .filter(c => c.connected)
+                .map(c => `<span class="controller">${c.id}</span>`)
+                .join('');
+            
+            controllersEl.innerHTML = connected || '<span style="color: #666">No controllers connected</span>';
+        }
+        
+        // Initialize audio
+        async function initAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Create synthesis engine
+            synthEngine = new DroneSynthEngine(audioContext, {
+                maxVoices: 16,
+                masterVolume: 0.7,
+                oscillatorType: 'sine',
+                filterFrequency: 2000,
+                filterQ: 1,
+                attack: 2.0,
+                decay: 1.0,
+                sustain: 0.8,
+                release: 4.0
+            });
+            
+            // Create analyser for visualization
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 2048;
+            analyser.smoothingTimeConstant = 0.85;
+            
+            // Connect to analyser
+            synthEngine.masterCompressor.connect(analyser);
+            
+            // Update UI
+            startButton.textContent = 'Audio Active';
+            startButton.disabled = true;
+            
+            // Start visualization
+            drawVisualizer();
+        }
+        
+        // Visualizer
+        function drawVisualizer() {
+            requestAnimationFrame(drawVisualizer);
+            
+            if (!analyser) return;
+            
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+            
+            // Clear canvas
+            ctx.fillStyle = 'rgba(10, 10, 10, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw frequency bars
+            const barWidth = (canvas.width / bufferLength) * 4;
+            let x = 0;
+            
+            for (let i = 0; i < bufferLength; i += 4) {
+                const barHeight = (dataArray[i] / 255) * canvas.height * 0.8;
+                
+                // Create gradient
+                const gradient = ctx.createLinearGradient(0, canvas.height - barHeight, 0, canvas.height);
+                gradient.addColorStop(0, `hsla(${120 + (i / bufferLength) * 60}, 70%, 50%, 0.8)`);
+                gradient.addColorStop(1, `hsla(${120 + (i / bufferLength) * 60}, 70%, 30%, 0.3)`);
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x, canvas.height - barHeight, barWidth - 2, barHeight);
+                
+                x += barWidth;
+            }
+            
+            // Draw center line
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height / 2);
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+        }
+        
+        // Event listeners
+        startButton.addEventListener('click', initAudio);
+        
+        // Start WebSocket connection
+        connectWebSocket();
+        
+        // Wake lock for mobile
+        if ('wakeLock' in navigator) {
+            document.addEventListener('visibilitychange', async () => {
+                if (document.visibilityState === 'visible' && audioContext) {
+                    try {
+                        await navigator.wakeLock.request('screen');
+                    } catch (e) {
+                        console.log('Wake lock failed:', e);
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
